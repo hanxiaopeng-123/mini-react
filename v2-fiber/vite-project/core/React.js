@@ -13,8 +13,11 @@ return {
         props:{
             ...props,
             children:children.map(child=>
-                typeof child==='string'
-                ?createTextNode(child):child)
+            {
+                console.log('child-->',child);
+               return (typeof child==='string'||typeof child==='number')
+                ?createTextNode(child):child
+            })
             }}
 }
 export default {createElement,createTextNode}

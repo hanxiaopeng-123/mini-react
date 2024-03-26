@@ -5,17 +5,7 @@ function render(el, container) {
             children: [el]
         }
     }
-    // const dom = el.type === 'TEXT_ELEMENT' ? document.createTextNode('') : document.createElement(el.type)
-    // console.log('dom', dom);
-    // const props = el.props
-    // const children = el.props.children
-    // for (let key in props) {
-    //     if (key !== 'children') {
-    //         dom[key] = props[key]
-    //     }
-    // }
-    // children.forEach(child => render(child, dom))
-    // container.append(dom)
+    root = fiberOfUnit
 }
 
 const ReactDOM = {
@@ -39,9 +29,11 @@ const updateProps = (dom, props) => {
         }
     }
 }
-const initChildren=(fiber)=>{
+const initChildren = (fiber, children) => {
+    console.log('fiber', fiber);
+    console.log('children', children);
     let prevChild = null
-    fiber.props.children.forEach((child, index) => {
+    children.forEach((child, index) => {
         let newfiber = {
             type: child.type,
             props: child.props,
@@ -60,21 +52,38 @@ const initChildren=(fiber)=>{
     });
 }
 
-let fiberOfUnit = null
-//执行任务函数
-const performUnitOffiber = (fiber) => {
+const updateFunctionComponent = (fiber) => {
+    const children =  [fiber.type(fiber.props)] 
+    //3 生成链表
+    initChildren(fiber, children)
+}
+const updateNormalComponent = (fiber) => {
     if (!fiber.dom) {
         //1 创建dom
         const dom = createDom(fiber)
         //将子节点添加到父级容器
-        fiber.parent.dom.append(dom)
+        // fiber.parent.dom.append(dom)
         const props = fiber.props
         //2 遍历props
         updateProps(dom, props)
     }
-
+    const children =  fiber.props.children
     //3 生成链表
-    initChildren(fiber)
+    initChildren(fiber, children)
+}
+
+let root = null
+let fiberOfUnit = null
+//执行任务函数
+const performUnitOffiber = (fiber) => {
+    console.log(fiber);
+    console.log(typeof fiber.type);
+    const isFunctionComponent = typeof fiber.type === 'function'
+    if (isFunctionComponent) {
+        updateFunctionComponent(fiber)
+    }else{
+        updateNormalComponent(fiber)
+    }
 
     //4 返回下一个任务
     if (fiber.child) {
@@ -83,13 +92,13 @@ const performUnitOffiber = (fiber) => {
     if (fiber.sibling) {
         return fiber.sibling
     }
-    let parent=fiber.parent
+    let parent = fiber.parent
     //找父亲的兄弟 父亲的兄弟没有的话 找爷爷的兄弟
     while (parent) {
         if (parent.sibling) {
             return parent.sibling
         }
-        parent=parent.parent
+        parent = parent.parent
     }
 }
 const fiberLoop = (deadline) => {
@@ -100,9 +109,37 @@ const fiberLoop = (deadline) => {
         fiberOfUnit = performUnitOffiber(fiberOfUnit)
         shouldYield = deadline.timeRemaining() < 1
     }
+    //统一提交根节点 没有下一个节点 并且只提交一次
+    if (!fiberOfUnit && root) {
+        commitRoot()
+    }
     requestIdleCallback(fiberLoop)
 
 }
+const commitRoot = () => {
+    commitWork(root.child)
+    root = null
+}
+const commitWork = (fiber) => {
+    console.log('fiber-->', fiber);
+    if (!fiber) return
+    //函数组件 没有dom属性 找父级 直到找到有dom的父级插入进去
+    let fiberParent = fiber.parent
+    while (!fiberParent.dom) {
+        fiberParent = fiberParent.parent
+    }
+    //判断是否有dom 没有的话 就不插入
+    if (fiber.dom) {
+        fiberParent.dom.append(fiber.dom)
+    }
+    if (fiber.child) {
+        commitWork(fiber.child)
+    }
+    if (fiber.sibling) {
+        commitWork(fiber.sibling)
+    }
+}
+
 
 requestIdleCallback(fiberLoop)
 export { ReactDOM }
