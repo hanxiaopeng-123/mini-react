@@ -14,7 +14,6 @@ return {
             ...props,
             children:children.map(child=>
             {
-                console.log('child-->',child);
                return (typeof child==='string'||typeof child==='number')
                 ?createTextNode(child):child
             })

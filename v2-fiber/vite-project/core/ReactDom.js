@@ -8,12 +8,17 @@ function render(el, container) {
     wipRoot = fiberOfUnit
 }
 function update() {
-    wipRoot = {
-        dom: currentRoot,
-        props: currentRoot.props,
-        alternate:currentRoot
+    let currentFiber=wipFiber
+    return ()=>{
+    console.log('currentFiber',currentFiber);
+
+        wipRoot = {
+            ...currentFiber,
+            alternate: currentFiber
+        }
+        fiberOfUnit = wipRoot
     }
-    fiberOfUnit = wipRoot
+   
 }
 const ReactDOM = {
     createRoot(container) {
@@ -29,10 +34,10 @@ const createDom = (fiber) => {
     return dom
 }
 
-const updateProps = (dom, props,oldProps) => {
+const updateProps = (dom, props, oldProps) => {
     //老的有 新的没有 删除 
     for (let key in oldProps) {
-        if(!(key in props)){
+        if (!(key in props)) {
             dom.removeAttribute(key)
         }
     }
@@ -40,7 +45,7 @@ const updateProps = (dom, props,oldProps) => {
     //老的没有 新的有 新增
     for (let key in props) {
         if (key !== 'children') {
-            if(props[key]!==oldProps[key]){
+            if (props[key] !== oldProps[key]) {
                 if (key.startsWith('on')) {
                     const eventType = key.slice(2).toLowerCase()
                     //删除旧的绑定事件
@@ -50,22 +55,22 @@ const updateProps = (dom, props,oldProps) => {
                     dom[key] = props[key]
                 }
             }
-           
+
         }
     }
 }
+
+let deletions = []
 const reconcileChildren = (fiber, children) => {
-    console.log('fiber', fiber);
-    console.log('children', children);
-    let oldFiber=fiber.alternate?.child
+
+    let oldFiber = fiber.alternate?.child
     let prevChild = null
     children.forEach((child, index) => {
-        const isSameType=oldFiber&&oldFiber.type==child.type
+        const isSameType = oldFiber && oldFiber.type == child.type
         let newfiber
-        if(isSameType){
+        if (isSameType) {
             //更新
-    console.log('oldFiber', oldFiber);
-            
+
             newfiber = {
                 type: child.type,
                 props: child.props,
@@ -73,36 +78,50 @@ const reconcileChildren = (fiber, children) => {
                 parent: fiber,
                 sibling: null,
                 child: null,
-                effectTag:'update',
-                alternate:oldFiber
+                effectTag: 'update',
+                alternate: oldFiber
             }
-        }else{
+        } else {
             //新增
-             newfiber = {
-                type: child.type,
-                props: child.props,
-                dom: null,
-                parent: fiber,
-                sibling: null,
-                child: null,
-                effectTag:'placement'
+            if(child){
+                newfiber = {
+                    type: child.type,
+                    props: child.props,
+                    dom: null,
+                    parent: fiber,
+                    sibling: null,
+                    child: null,
+                    effectTag: 'placement'
+                }
+            }
+          
+            if (oldFiber) {
+                deletions.push(oldFiber)
             }
         }
-        if(oldFiber){
-            oldFiber=oldFiber.sibling
+        if (oldFiber) {
+            oldFiber = oldFiber.sibling
         }
-        
+
         if (index == 0) {
             fiber.child = newfiber
         } else {
             prevChild.sibling = newfiber
         }
-        prevChild = newfiber
+        if(newfiber){
+            prevChild = newfiber
+        }
 
     });
+    while (oldFiber) {
+        deletions.push(oldFiber)
+        oldFiber = oldFiber.sibling
+    }
 }
 
 const updateFunctionComponent = (fiber) => {
+
+    wipFiber=fiber
     const children = [fiber.type(fiber.props)]
     //3 生成链表
     reconcileChildren(fiber, children)
@@ -115,20 +134,20 @@ const updateNormalComponent = (fiber) => {
         // fiber.parent.dom.append(dom)
         const props = fiber.props
         //2 遍历props
-        updateProps(dom, props,{})
+        updateProps(dom, props, {})
     }
     const children = fiber.props.children
     //3 生成链表
     reconcileChildren(fiber, children)
 }
-
+let wipFiber=null
 let wipRoot = null
-let currentRoot=null
+let currentRoot = null
 let fiberOfUnit = null
 //执行任务函数
 const performUnitOffiber = (fiber) => {
-    console.log(fiber);
-    console.log(typeof fiber.type);
+    // console.log(fiber);
+    // console.log(typeof fiber.type);
     const isFunctionComponent = typeof fiber.type === 'function'
     if (isFunctionComponent) {
         updateFunctionComponent(fiber)
@@ -158,6 +177,10 @@ const fiberLoop = (deadline) => {
         //执行任务
         //执行完返回新的任务
         fiberOfUnit = performUnitOffiber(fiberOfUnit)
+        //当前root的兄弟节点和下一个节点类型相同时 结束更新
+        if(wipRoot?.sibling?.type==fiberOfUnit?.type){
+            fiberOfUnit=undefined
+        }
         shouldYield = deadline.timeRemaining() < 1
     }
     //统一提交根节点 没有下一个节点 并且只提交一次
@@ -168,28 +191,40 @@ const fiberLoop = (deadline) => {
 
 }
 const commitRoot = () => {
+    deletions.forEach(commitDeletion);
     commitWork(wipRoot.child)
-    currentRoot=wipRoot
-    console.log('currentRoot',currentRoot)
+    currentRoot = wipRoot
     wipRoot = null
+    deletions = []
+}
+const commitDeletion = (fiber) => {
+
+    if (fiber.dom) {
+        let fiberParent = fiber.parent
+        while (!fiberParent.dom) {
+            fiberParent = fiberParent.parent
+        }
+        fiberParent.dom.removeChild(fiber.dom)
+    } else {
+        commitDeletion(fiber.child)
+    }
 }
 const commitWork = (fiber) => {
-    console.log('fiber-->', fiber);
     if (!fiber) return
     //函数组件 没有dom属性 找父级 直到找到有dom的父级插入进去
     let fiberParent = fiber.parent
     while (!fiberParent.dom) {
         fiberParent = fiberParent.parent
     }
-    if(fiber.effectTag==='update'){
-        updateProps(fiber.dom,fiber.props,fiber.alternate.props)
-    }else if(fiber.effectTag==='placement'){
-//判断是否有dom 没有的话 就不插入
-if (fiber.dom) {
-    fiberParent.dom.append(fiber.dom)
-}
+    if (fiber.effectTag === 'update') {
+        updateProps(fiber.dom, fiber.props, fiber.alternate.props)
+    } else if (fiber.effectTag === 'placement') {
+        //判断是否有dom 没有的话 就不插入
+        if (fiber.dom) {
+            fiberParent.dom.append(fiber.dom)
+        }
     }
-    
+
     if (fiber.child) {
         commitWork(fiber.child)
     }
@@ -200,7 +235,7 @@ if (fiber.dom) {
 
 
 requestIdleCallback(fiberLoop)
-export { ReactDOM,update }
+export { ReactDOM, update }
 
 
 
