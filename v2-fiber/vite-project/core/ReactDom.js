@@ -8,9 +8,9 @@ function render(el, container) {
     wipRoot = fiberOfUnit
 }
 function update() {
-    let currentFiber=wipFiber
-    return ()=>{
-    console.log('currentFiber',currentFiber);
+    let currentFiber = wipFiber
+    return () => {
+        console.log('currentFiber', currentFiber);
 
         wipRoot = {
             ...currentFiber,
@@ -18,7 +18,7 @@ function update() {
         }
         fiberOfUnit = wipRoot
     }
-   
+
 }
 const ReactDOM = {
     createRoot(container) {
@@ -83,7 +83,7 @@ const reconcileChildren = (fiber, children) => {
             }
         } else {
             //新增
-            if(child){
+            if (child) {
                 newfiber = {
                     type: child.type,
                     props: child.props,
@@ -94,7 +94,7 @@ const reconcileChildren = (fiber, children) => {
                     effectTag: 'placement'
                 }
             }
-          
+
             if (oldFiber) {
                 deletions.push(oldFiber)
             }
@@ -108,7 +108,7 @@ const reconcileChildren = (fiber, children) => {
         } else {
             prevChild.sibling = newfiber
         }
-        if(newfiber){
+        if (newfiber) {
             prevChild = newfiber
         }
 
@@ -120,8 +120,9 @@ const reconcileChildren = (fiber, children) => {
 }
 
 const updateFunctionComponent = (fiber) => {
-
-    wipFiber=fiber
+    hookArr = []
+    hookIndex = 0
+    wipFiber = fiber
     const children = [fiber.type(fiber.props)]
     //3 生成链表
     reconcileChildren(fiber, children)
@@ -140,7 +141,7 @@ const updateNormalComponent = (fiber) => {
     //3 生成链表
     reconcileChildren(fiber, children)
 }
-let wipFiber=null
+let wipFiber = null
 let wipRoot = null
 let currentRoot = null
 let fiberOfUnit = null
@@ -178,8 +179,8 @@ const fiberLoop = (deadline) => {
         //执行完返回新的任务
         fiberOfUnit = performUnitOffiber(fiberOfUnit)
         //当前root的兄弟节点和下一个节点类型相同时 结束更新
-        if(wipRoot?.sibling?.type==fiberOfUnit?.type){
-            fiberOfUnit=undefined
+        if (wipRoot?.sibling?.type == fiberOfUnit?.type) {
+            fiberOfUnit = undefined
         }
         shouldYield = deadline.timeRemaining() < 1
     }
@@ -232,10 +233,39 @@ const commitWork = (fiber) => {
         commitWork(fiber.sibling)
     }
 }
+let hookArr
+let hookIndex
+const useState = (initial) => {
+    let currentFiber = wipFiber
+    const oldstateHook = currentFiber.alternate?.hookArr[hookIndex]
+    const stateHook = {
+        state: oldstateHook ? oldstateHook.state : initial,
+        queue: oldstateHook ? oldstateHook.queue : []
+    }
+    stateHook.queue.forEach(action => {
+        stateHook.state = action(stateHook.state)
+    })
+    stateHook.queue.length = 0
+    hookIndex++
+    hookArr.push(stateHook)
+    currentFiber.hookArr = hookArr
+    const setState = (action) => {
+        //检测修改后的值是否和之前一样 一样的话就不需要渲染
+        const eagerState=typeof action === 'function'?action(stateHook.state):action
+        if(eagerState===stateHook.state)return
+        stateHook.queue.push(typeof action === 'function' ? action : () => action)
+        wipRoot = {
+            ...currentFiber,
+            alternate: currentFiber
+        }
+        fiberOfUnit = wipRoot
 
+    }
+    return [stateHook.state, setState]
+}
 
 requestIdleCallback(fiberLoop)
-export { ReactDOM, update }
+export { ReactDOM, update, useState }
 
 
 
