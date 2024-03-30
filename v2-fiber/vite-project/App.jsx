@@ -1,12 +1,26 @@
 import React from "./core/React.js"
-import {update,useState} from './core/ReactDom.js'
+import {update,useState,useEffect} from './core/ReactDom.js'
   // const  App=createElement("div",{id:"app"},'22')
   let a=1
 
   let show=false
   function Counter({num}){
+  
     let [count,setCount]=useState(0)
+    
     let [bar,setBar]=useState('bar')
+    useEffect(()=>{
+      console.log('useEffect-count');
+      return ()=>{
+        console.log('cleanup-count');
+      }
+    },[count])
+    useEffect(()=>{
+      console.log('useEffect-bar');
+      return ()=>{
+        console.log('cleanup-bar');
+      }
+    },[bar])
     const update2=update()
     console.log('Counter');
     // const Foo=()=>{

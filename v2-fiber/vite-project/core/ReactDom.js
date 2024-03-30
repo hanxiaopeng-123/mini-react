@@ -10,7 +10,6 @@ function render(el, container) {
 function update() {
     let currentFiber = wipFiber
     return () => {
-        console.log('currentFiber', currentFiber);
 
         wipRoot = {
             ...currentFiber,
@@ -122,6 +121,7 @@ const reconcileChildren = (fiber, children) => {
 const updateFunctionComponent = (fiber) => {
     hookArr = []
     hookIndex = 0
+    effectHooks=[]
     wipFiber = fiber
     const children = [fiber.type(fiber.props)]
     //3 生成链表
@@ -194,9 +194,63 @@ const fiberLoop = (deadline) => {
 const commitRoot = () => {
     deletions.forEach(commitDeletion);
     commitWork(wipRoot.child)
+    commitCleanup()
+    commitEffect()
     currentRoot = wipRoot
     wipRoot = null
     deletions = []
+}
+const commitCleanup = () => {
+    function runCleanup(fiber) {
+        if(!fiber)return
+        // fiber.alternate?.effectHooks?.forEach((hook)=>{
+        //     console.log('commitCleanup',hook);
+        //     hook?.cleanup()
+        // })
+        if(fiber.alternate){
+            const oldEffecHooks=fiber?.alternate?.effectHooks
+            fiber?.effectHooks?.forEach((newHook,index)=>{
+                if(newHook.deps.length===0)return
+                newHook.deps.forEach((newDep,idx)=>{
+                    if(newDep!==oldEffecHooks[index].deps[idx]){
+                        oldEffecHooks[index]?.cleanup()
+                    }
+                })
+            })
+        }
+        runCleanup(fiber.child)
+        runCleanup(fiber.sibling)
+    }
+    runCleanup(wipRoot)
+}
+const commitEffect=()=>{
+    function run(fiber){
+        // console.log('commitEffect-fiber',fiber);
+        if(!fiber)return
+        if(!fiber.alternate){
+            //新增
+            fiber.effectHooks?.forEach((hook)=>{
+               hook.cleanup=  hook.callback()
+            })
+        }else{
+            //编辑
+            //判断依赖值有没有改变 改变才调用
+            const oldEffecHooks=fiber?.alternate?.effectHooks
+            fiber?.effectHooks?.forEach((newHook,index)=>{
+                if(newHook.deps.length===0)return
+                newHook.deps.forEach((newDep,idx)=>{
+                    if(newDep!==oldEffecHooks[index].deps[idx]){
+                        newHook.cleanup=  newHook.callback()
+                    }else{
+                        newHook.cleanup=  oldEffecHooks[index].cleanup
+                    }
+                })
+            })
+        }
+        run(fiber.child)
+        run(fiber.sibling)
+    }
+    run(wipRoot)
 }
 const commitDeletion = (fiber) => {
 
@@ -264,8 +318,21 @@ const useState = (initial) => {
     return [stateHook.state, setState]
 }
 
+let effectHooks=[]
+const useEffect = (callback, dependencies) => {
+    let currentFiber = wipFiber
+
+    const effectHook={
+        callback,
+        deps:dependencies,
+        cleanup:null
+    }
+    effectHooks.push(effectHook)
+    currentFiber.effectHooks=effectHooks
+}
+
 requestIdleCallback(fiberLoop)
-export { ReactDOM, update, useState }
+export { ReactDOM, update, useState,useEffect }
 
 
 
